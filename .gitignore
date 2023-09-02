@@ -1,0 +1,26 @@
+# Python cache files
+__pycache__/
+
+# Virtual environment
+venv/
+
+# Pycharm data
+.idea/
+
+
+# Byte-compiled / optimized / DLL files
+*.py[cod]
+*.pyo
+*.egg-info/
+*.rej
+*.log
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+

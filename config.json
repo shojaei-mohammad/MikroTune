@@ -1,0 +1,7 @@
+{
+    "config": {
+      "wait_for_regisration": 60,
+      "valid_tx_signal": 70,
+      "valid_ping_time": 20
+    }
+}
