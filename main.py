@@ -34,6 +34,19 @@ from typing import Dict
 import routeros_api
 import json
 import time
+import threading
+
+
+class ConcurrentUtility:
+    def __init__(self):
+        self.values = {}  # A dictionary to store multiple concurrent values
+        self.is_running = True
+
+    def update_value(self, key, api_call, interval=5, **api_call_params):
+        while self.is_running:
+            response = api_call(**api_call_params)
+            self.values[key] = response
+            time.sleep(interval)
 
 
 def gather_info():
@@ -136,33 +149,72 @@ def read_config_from_json(json_file_path):
 
 
 def set_frequency(api, frequency):
-    # This is a placeholder. The real command to set the frequency might differ.
-    api.get_binary_resource("/").call("set/frequency", {"frequency": frequency})
+    resource = api.get_resource("/interface/wireless")
+    wireless_interfaces = resource.get()
+
+    for interface in wireless_interfaces:
+        try:
+            print(frequency)
+            resource.set(id=interface["id"], frequency=str(frequency))
+            print(f"Frequency set to {frequency} for interface {interface['id']}")
+        except Exception as e:
+            print(f"Error setting frequency for interface {interface['id']}: {e}")
 
 
-def check_station_registered(api, wait_time):
-    # Placeholder logic to check if station is registered
-    # We'll wait for the provided duration and then check if the station is registered.
-    # The exact method to check station registration will depend on the RouterOS commands available.
-    time.sleep(wait_time)
-    # For example:
-    # registration_status = api.get_binary_resource('/').call('interface/wireless/registration-table/get')
-    # return 'station_name' in registration_status
+def update_ping_time(api, station_address, count=4):
+    # Convert station_address and count to bytes before sending
+    print(type(station_address), type(count))
+    try:
+        ping_response = api.get_resource("/").call(
+            "ping", {"address": station_address, "count": "4"}
+        )
+        return float(ping_response["avg-rtt"])
+    except Exception as e:
+        print(f"Error while pinging: {e}")
+        return float("inf")  # return a large number to signify an error
 
 
-def check_ping_and_signal(api, valid_ping, valid_signal):
-    # Use the provided RouterOS API commands to check the ping and signal strength.
-    # The exact methods might differ based on the RouterOS version and available commands.
-    ping_response = api.get_binary_resource("/").call(
-        "ping", {"address": "station_ip", "count": "1"}
-    )
-    # Assuming the ping response contains an 'avg-rtt' field:
-    ping_value = int(ping_response[0]["avg-rtt"])
-    # Placeholder for signal strength:
-    # signal_response = api.get_binary_resource('/').call('get_signal_strength_command')
-    # signal_value = int(signal_response['signal_strength'])
+def check_station_registered(api, wait_time, config_ping_value, station_address):
+    utility = ConcurrentUtility()
+    registration_resource = api.get_resource("interface/wireless/registration-table")
+    start_time = time.time()
 
-    return ping_value <= valid_ping  # and signal_value >= valid_signal
+    # Start a separate thread to ping the station and update the average ping time
+    # threading.Thread(
+    #     target=utility.update_value,
+    #     args=("avg_ping_time", update_ping_time, 5),
+    #     kwargs={"api": api, "station_address": station_address},
+    # ).start()
+
+    while time.time() - start_time < wait_time:
+        registration_statuses = registration_resource.get()
+        print(registration_statuses)  # For debugging
+
+        for registration_status in registration_statuses:
+            # Check if the station has registered
+            if "station_name" in registration_status:
+                # Check signal strength
+                signal_strength = int(
+                    registration_status.get("signal-strength", "-999")
+                )  # default to a low value if not found
+                if signal_strength > -70:
+                    # Recall the current average ping time
+                    avg_ping_time = utility.values.get("avg_ping_time", float("inf"))
+                    print(f"Average ping time: {avg_ping_time}")  # For debugging
+
+                    # Check both conditions: signal strength and ping average
+                    if signal_strength > -70 and avg_ping_time < config_ping_value:
+                        utility.is_running = False
+                        return True
+
+        # Wait a short while before checking again
+        time.sleep(5)
+
+    # Stop the ping thread
+    utility.is_running = False
+
+    # If the conditions aren't met within the wait_time, return False.
+    return False
 
 
 def log_results_to_file(results, file_path):
@@ -171,24 +223,29 @@ def log_results_to_file(results, file_path):
 
 
 def main():
-    ap_details, frequency_range, bandwidth_test_params = gather_info()
+    # ap_details, frequency_range, bandwidth_test_params = gather_info()
     config = read_config_from_json("config.json")
+    # connection = routeros_api.RouterOsApiPool(
+    #     ap_details["IP"],
+    #     username=ap_details["username"],
+    #     password=ap_details["password"],
+    #     port=ap_details["port"],
+    # )
     connection = routeros_api.RouterOsApiPool(
-        ap_details["IP"],
-        username=ap_details["username"],
-        password=ap_details["password"],
-        port=ap_details["port"],
+        "192.168.9.27", username="22", password="22", plaintext_login=True
     )
+    # print(ap_details["IP"], ap_details["username"], ap_details["password"],)
     api = connection.get_api()
 
+    frequency_range = [5000, 5100]
     for freq in range(frequency_range[0], frequency_range[1] + 1, 5):
         set_frequency(api, freq)
 
-        if not check_station_registered(api, config["wait_for_regisration"]):
-            continue
-
-        if not check_ping_and_signal(
-            api, config["valid_ping_time"], config["valid_tx_signal"]
+        if not check_station_registered(
+            api,
+            config["wait_for_registration"],
+            config["valid_ping_time"],
+            "192.168.9.28",
         ):
             continue
 
