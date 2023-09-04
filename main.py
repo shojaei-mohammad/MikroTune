@@ -28,25 +28,12 @@ Disclaimer:
 Author:
     [Your Name / Your Organization]
 """
-
+import datetime
 from typing import Dict
 
 import routeros_api
 import json
 import time
-import threading
-
-
-class ConcurrentUtility:
-    def __init__(self):
-        self.values = {}  # A dictionary to store multiple concurrent values
-        self.is_running = True
-
-    def update_value(self, key, api_call, interval=5, **api_call_params):
-        while self.is_running:
-            response = api_call(**api_call_params)
-            self.values[key] = response
-            time.sleep(interval)
 
 
 def gather_info():
@@ -154,64 +141,67 @@ def set_frequency(api, frequency):
 
     for interface in wireless_interfaces:
         try:
-            print(frequency)
             resource.set(id=interface["id"], frequency=str(frequency))
-            print(f"Frequency set to {frequency} for interface {interface['id']}")
+            print(f"Frequency set to {frequency} for interface {interface['name']}")
         except Exception as e:
-            print(f"Error setting frequency for interface {interface['id']}: {e}")
+            print(f"Error setting frequency for interface {interface['name']}: {e}")
 
 
-def update_ping_time(api, station_address, count=4):
-    # Convert station_address and count to bytes before sending
-    print(type(station_address), type(count))
+def update_ping_time(api, ap_address, station_address, count=4):
     try:
-        ping_response = api.get_resource("/").call(
-            "ping", {"address": station_address, "count": "4"}
+        ping_responses = api.get_resource("/").call(
+            "ping",
+            {"address": station_address, "count": "4", "src-address": ap_address},
         )
-        return float(ping_response["avg-rtt"])
+
+        # Check if 'avg-rtt' exists in the last response
+        if "avg-rtt" in ping_responses[-1]:
+            # Extracting avg-rtt from the last dictionary in the list and stripping the 'ms'
+            avg_rtt = float(ping_responses[-1]["avg-rtt"].rstrip("ms"))
+            return avg_rtt
+        else:
+            # If 'avg-rtt' doesn't exist, it indicates a potential issue, so return a large value
+            print("Ping timeout or other issues detected.")
+            return float("inf")
+
     except Exception as e:
         print(f"Error while pinging: {e}")
         return float("inf")  # return a large number to signify an error
 
 
-def check_station_registered(api, wait_time, config_ping_value, station_address):
-    utility = ConcurrentUtility()
+def check_station_registered(
+    api, wait_time, config_ping_value, ap_address, station_address
+):
     registration_resource = api.get_resource("interface/wireless/registration-table")
     start_time = time.time()
-
-    # Start a separate thread to ping the station and update the average ping time
-    # threading.Thread(
-    #     target=utility.update_value,
-    #     args=("avg_ping_time", update_ping_time, 5),
-    #     kwargs={"api": api, "station_address": station_address},
-    # ).start()
+    is_station_registered = False
 
     while time.time() - start_time < wait_time:
-        registration_statuses = registration_resource.get()
-        print(registration_statuses)  # For debugging
+        registration_status = registration_resource.get()
 
-        for registration_status in registration_statuses:
-            # Check if the station has registered
-            if "station_name" in registration_status:
-                # Check signal strength
-                signal_strength = int(
-                    registration_status.get("signal-strength", "-999")
-                )  # default to a low value if not found
-                if signal_strength > -70:
-                    # Recall the current average ping time
-                    avg_ping_time = utility.values.get("avg_ping_time", float("inf"))
-                    print(f"Average ping time: {avg_ping_time}")  # For debugging
+        # Check if the station has registered based on list length
+        if len(registration_status) > 0:
+            is_station_registered = True
 
-                    # Check both conditions: signal strength and ping average
-                    if signal_strength > -70 and avg_ping_time < config_ping_value:
-                        utility.is_running = False
-                        return True
+        # If the station is registered, start pinging
+        if is_station_registered:
+            print("Station registered, waiting for readiness!")
+            time.sleep(25)
+            print("Start pinging")
+            avg_ping_time = update_ping_time(api, ap_address, station_address)
+            print(f"Average ping time: {avg_ping_time}")
+
+            signal_strength = int(registration_status[0].get("signal-strength", "-999"))
+
+            # Check both conditions: signal strength and ping average
+            if signal_strength > -70 and avg_ping_time < config_ping_value:
+                return True
+            else:
+                # Exit the loop if station is ready but doesn't meet ping/signal conditions
+                break
 
         # Wait a short while before checking again
         time.sleep(5)
-
-    # Stop the ping thread
-    utility.is_running = False
 
     # If the conditions aren't met within the wait_time, return False.
     return False
@@ -222,22 +212,64 @@ def log_results_to_file(results, file_path):
         f.write(results)
 
 
-def main():
-    # ap_details, frequency_range, bandwidth_test_params = gather_info()
-    config = read_config_from_json("config.json")
-    # connection = routeros_api.RouterOsApiPool(
-    #     ap_details["IP"],
-    #     username=ap_details["username"],
-    #     password=ap_details["password"],
-    #     port=ap_details["port"],
-    # )
-    connection = routeros_api.RouterOsApiPool(
-        "192.168.9.27", username="22", password="22", plaintext_login=True
-    )
-    # print(ap_details["IP"], ap_details["username"], ap_details["password"],)
-    api = connection.get_api()
+def run_bandwidth_test(api, params):
+    """
+    Run the bandwidth test using the MikroTik RouterOS API.
 
-    frequency_range = [5000, 5100]
+    Args:
+    - api (routeros_api.RouterOsApi): The API instance for RouterOS communication.
+    - params (dict): Dictionary containing bandwidth test parameters.
+
+    Returns:
+    - dict: Dictionary containing bandwidth test results.
+    """
+
+    # Mapping for protocol
+    protocol_map = {"tcp": "tcp", "udp": "udp"}  # Update this line  # And this line
+
+    # Preparing bandwidth test arguments
+    test_args = {
+        "address": params["station_IP"],
+        "duration": str(params["duration"]),
+        "protocol": protocol_map[params["protocol"]],
+    }
+
+    if params["limit"]:
+        test_args["local-tx-speed"] = f"{params['limit']}M"
+        test_args["remote-tx-speed"] = f"{params['limit']}M"
+
+    # Depending on direction, specify more arguments
+    if params["direction"] == "send":
+        test_args["direction"] = "transmit"
+    elif params["direction"] == "receive":
+        test_args["direction"] = "receive"
+    elif params["direction"] == "both":
+        test_args["direction"] = "both"
+
+    try:
+        test_results = api.get_resource("/tool").call("bandwidth-test", test_args)
+
+        return test_results[-1]
+    except Exception as e:
+        print(f"Error while executing bandwidth test: {e}")
+        return None
+
+
+def main():
+    ap_details, frequency_range, bandwidth_test_params = gather_info()
+    config = read_config_from_json("config.json")
+    connection = routeros_api.RouterOsApiPool(
+        ap_details["IP"],
+        username=ap_details["username"],
+        password=ap_details["password"],
+        port=ap_details["port"],
+        plaintext_login=True,
+    )
+    # connection = routeros_api.RouterOsApiPool(
+    #     "192.168.9.27", username="22", password="22", plaintext_login=True
+    # )
+    api = connection.get_api()
+    # frequency_range = [5000, 5100]
     for freq in range(frequency_range[0], frequency_range[1] + 1, 5):
         set_frequency(api, freq)
 
@@ -245,11 +277,45 @@ def main():
             api,
             config["wait_for_registration"],
             config["valid_ping_time"],
-            "192.168.9.28",
+            ap_details.get("IP"),
+            bandwidth_test_params.get("station_IP"),
         ):
             continue
+        test_time = datetime.datetime.now()
+        print(f"Running test for frequency: {freq}MHz")
+        result = run_bandwidth_test(api, bandwidth_test_params)
+        print(f"Results for frequency {freq}MHz: {result}")
+        file_name = "test_results.txt"
+        average_ping_time = "10ms"
+        signal = "-40dBm"
+        ap_ip = "192.168.0.1"
+        station_ip = "192.168.0.2"
+        with open(file_name, "a") as file:
+            # Write the test time
+            file.write(f"Test Time: {test_time}\n")
 
-        # Do the bandwidth test here
+            # Write the average ping time
+            file.write(f"Average Ping Time: {average_ping_time}\n")
+
+            # Write the signal strength
+            file.write(f"Signal Strength: {signal}\n")
+
+            # Write the AP IP Address
+            file.write(f"AP IP Address: {ap_ip}\n")
+
+            # Write the Station IP Address
+            file.write(f"Station IP Address: {station_ip}\n")
+
+            # Write the test result
+            for key, value in result.items():
+                file.write(f"{key}: {value}\n")
+
+            file.write(
+                "\n"
+            )  # Separate the results with an empty line for better readability
+
+        # Wait for the test duration plus an additional delay before moving to the next frequency
+        time.sleep(bandwidth_test_params["duration"] + 3)
 
     connection.disconnect()
 
