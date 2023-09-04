@@ -26,7 +26,11 @@ Disclaimer:
     with local regulations when adjusting frequencies.
 
 Author:
-    [Your Name / Your Organization]
+    Mohammad Shojaei
+    Contact: m.shojaei@hotmail.com
+
+Date:
+    Created on: September 2, 2023
 """
 import datetime
 from typing import Dict
@@ -34,6 +38,9 @@ from typing import Dict
 import routeros_api
 import json
 import time
+
+
+SHARED_DATA = {}
 
 
 def gather_info():
@@ -189,9 +196,11 @@ def check_station_registered(
             time.sleep(25)
             print("Start pinging")
             avg_ping_time = update_ping_time(api, ap_address, station_address)
+            SHARED_DATA["average_ping_time"] = avg_ping_time
             print(f"Average ping time: {avg_ping_time}")
 
             signal_strength = int(registration_status[0].get("signal-strength", "-999"))
+            SHARED_DATA["signal"] = signal_strength
 
             # Check both conditions: signal strength and ping average
             if signal_strength > -70 and avg_ping_time < config_ping_value:
@@ -205,11 +214,6 @@ def check_station_registered(
 
     # If the conditions aren't met within the wait_time, return False.
     return False
-
-
-def log_results_to_file(results, file_path):
-    with open(file_path, "a") as f:
-        f.write(results)
 
 
 def run_bandwidth_test(api, params):
@@ -265,11 +269,9 @@ def main():
         port=ap_details["port"],
         plaintext_login=True,
     )
-    # connection = routeros_api.RouterOsApiPool(
-    #     "192.168.9.27", username="22", password="22", plaintext_login=True
-    # )
+
     api = connection.get_api()
-    # frequency_range = [5000, 5100]
+
     for freq in range(frequency_range[0], frequency_range[1] + 1, 5):
         set_frequency(api, freq)
 
@@ -286,11 +288,14 @@ def main():
         result = run_bandwidth_test(api, bandwidth_test_params)
         print(f"Results for frequency {freq}MHz: {result}")
         file_name = "test_results.txt"
-        average_ping_time = "10ms"
-        signal = "-40dBm"
-        ap_ip = "192.168.0.1"
-        station_ip = "192.168.0.2"
+        average_ping_time = SHARED_DATA["average_ping_time"]
+        signal = SHARED_DATA["signal"]
+        ap_ip = ap_details.get("IP")
+        station_ip = bandwidth_test_params.get("station_IP")
         with open(file_name, "a") as file:
+            # Separator
+            file.write("==============================================\n")
+
             # Write the test time
             file.write(f"Test Time: {test_time}\n")
 
