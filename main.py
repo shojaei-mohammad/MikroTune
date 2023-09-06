@@ -33,7 +33,6 @@ Date:
     Created on: September 2, 2023
 """
 import datetime
-from typing import Dict
 
 import routeros_api
 import json
@@ -52,7 +51,13 @@ def gather_info():
     """
 
     # Welcome message
-    print("Welcome to the MikroTune Configuration Wizard!")
+    message = """
+      ___       __   __         ___    ___  __                   __   __  ___            ___ 
+|  | |__  |    /  ` /  \  |\/| |__      |  /  \     |\/| | |__/ |__) /  \  |  |  | |\ | |__  
+|/\| |___ |___ \__, \__/  |  | |___     |  \__/     |  | | |  \ |  \ \__/  |  \__/ | \| |___ 
+                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+    """
+    print(message)
     input("Press Enter to begin...")
 
     # AP Details
@@ -103,21 +108,25 @@ def gather_info():
         else:
             print("Invalid choice. Please choose 1, 2, or 3.")
 
-    # Limit in MB
-    limit_input = input("\nEnter limit in Mb (default None): ")
-    if limit_input:
-        try:
-            bandwidth_test_params["limit"] = int(limit_input)
-        except ValueError:
-            bandwidth_test_params["limit"] = None
+    # Specify Limit or Unlimited
+    specify_limit = input("\nDo you want to specify a limit? (yes/no) [no]: ").lower()
+    if specify_limit == "yes":
+        loca_tx = input("Enter local Tx limit in Mbps (default unlimited): ")
+        remote_tx = input("Enter remote TX limit in Mbps (default unlimited): ")
+
+        bandwidth_test_params["local_tx"] = int(loca_tx) if loca_tx else "unlimited"
+        bandwidth_test_params["remote_tx"] = (
+            int(remote_tx) if remote_tx else "unlimited"
+        )
     else:
-        bandwidth_test_params["limit"] = None
+        bandwidth_test_params["local_tx"] = "unlimited"
+        bandwidth_test_params["remote_tx"] = "unlimited"
 
     # Duration
     while True:
         try:
-            bandwidth_test_params["duration"] = int(
-                input("\nEnter test duration in seconds: ")
+            bandwidth_test_params["duration"] = (
+                int(input("\nEnter test duration in seconds: ")) + 1
             )
             break
         except ValueError:
@@ -193,7 +202,7 @@ def check_station_registered(
         # If the station is registered, start pinging
         if is_station_registered:
             print("Station registered, waiting for readiness!")
-            time.sleep(25)
+            time.sleep(20)
             print("Start pinging")
             avg_ping_time = update_ping_time(api, ap_address, station_address)
             SHARED_DATA["average_ping_time"] = avg_ping_time
@@ -229,7 +238,7 @@ def run_bandwidth_test(api, params):
     """
 
     # Mapping for protocol
-    protocol_map = {"tcp": "tcp", "udp": "udp"}  # Update this line  # And this line
+    protocol_map = {"tcp": "tcp", "udp": "udp"}
 
     # Preparing bandwidth test arguments
     test_args = {
@@ -237,10 +246,6 @@ def run_bandwidth_test(api, params):
         "duration": str(params["duration"]),
         "protocol": protocol_map[params["protocol"]],
     }
-
-    if params["limit"]:
-        test_args["local-tx-speed"] = f"{params['limit']}M"
-        test_args["remote-tx-speed"] = f"{params['limit']}M"
 
     # Depending on direction, specify more arguments
     if params["direction"] == "send":
@@ -250,8 +255,16 @@ def run_bandwidth_test(api, params):
     elif params["direction"] == "both":
         test_args["direction"] = "both"
 
+    # If local_tx and remote_tx are not 'unlimited', set them in test_args
+    if params["local_tx"] != "unlimited":
+        test_args["local-tx-speed"] = f"{params['local_tx']}M"
+
+    if params["remote_tx"] != "unlimited":
+        test_args["remote-tx-speed"] = f"{params['remote_tx']}M"
+
     try:
         test_results = api.get_resource("/tool").call("bandwidth-test", test_args)
+        print("this is test result: ", test_results)
 
         return test_results[-1]
     except Exception as e:
@@ -286,38 +299,51 @@ def main():
         test_time = datetime.datetime.now()
         print(f"Running test for frequency: {freq}MHz")
         result = run_bandwidth_test(api, bandwidth_test_params)
-        print(f"Results for frequency {freq}MHz: {result}")
         file_name = "test_results.txt"
         average_ping_time = SHARED_DATA["average_ping_time"]
         signal = SHARED_DATA["signal"]
         ap_ip = ap_details.get("IP")
         station_ip = bandwidth_test_params.get("station_IP")
         with open(file_name, "a") as file:
-            # Separator
-            file.write("==============================================\n")
+            # Header
+            file.write(
+                "========================= Test Parameters =========================\n\n"
+            )
 
             # Write the test time
-            file.write(f"Test Time: {test_time}\n")
+            file.write(f"Test Time: {test_time}\n\n")
 
             # Write the average ping time
-            file.write(f"Average Ping Time: {average_ping_time}\n")
+            file.write(f"Average Ping Time: {average_ping_time}\n\n")
 
             # Write the signal strength
-            file.write(f"Signal Strength: {signal}\n")
+            file.write(f"Signal Strength: {signal}\n\n")
 
             # Write the AP IP Address
-            file.write(f"AP IP Address: {ap_ip}\n")
+            file.write(f"AP IP Address: {ap_ip}\n\n")
 
             # Write the Station IP Address
-            file.write(f"Station IP Address: {station_ip}\n")
+            file.write(f"Station IP Address: {station_ip}\n\n")
+
+            # Write the frequency
+            file.write(f"Frequency: {freq}\n\n")
+
+            file.write(
+                "========================== Test Results ==========================\n\n"
+            )
 
             # Write the test result
             for key, value in result.items():
-                file.write(f"{key}: {value}\n")
+                try:
+                    file.write(
+                        f"{key}: {str(value)}\n\n"
+                    )  # Convert value to string & add newline for spacing
+                except Exception as e:
+                    print(f"Error writing key: {key}, value: {value} to the file.")
 
             file.write(
-                "\n"
-            )  # Separate the results with an empty line for better readability
+                "========================== End of Test ===========================\n\n"
+            )
 
         # Wait for the test duration plus an additional delay before moving to the next frequency
         time.sleep(bandwidth_test_params["duration"] + 3)
