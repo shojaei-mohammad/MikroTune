@@ -264,9 +264,8 @@ def run_bandwidth_test(api, params):
 
     try:
         test_results = api.get_resource("/tool").call("bandwidth-test", test_args)
-        print("this is test result: ", test_results)
 
-        return test_results[-1]
+        return test_results
     except Exception as e:
         print(f"Error while executing bandwidth test: {e}")
         return None
@@ -284,7 +283,13 @@ def main():
     )
 
     api = connection.get_api()
-
+    bps_fields = [
+        "tx-current",
+        "tx-10-second-avg",
+        "tx-total-avg",
+        "rx-current",
+        "rx-10-second-average",
+    ]
     for freq in range(frequency_range[0], frequency_range[1] + 1, 5):
         set_frequency(api, freq)
 
@@ -299,50 +304,74 @@ def main():
         test_time = datetime.datetime.now()
         print(f"Running test for frequency: {freq}MHz")
         result = run_bandwidth_test(api, bandwidth_test_params)
-        file_name = "test_results.txt"
         average_ping_time = SHARED_DATA["average_ping_time"]
         signal = SHARED_DATA["signal"]
         ap_ip = ap_details.get("IP")
         station_ip = bandwidth_test_params.get("station_IP")
-        with open(file_name, "a") as file:
-            # Header
+        # Prepare the headers and data lines
+        headers = [
+            "status",
+            "duration",
+            "tx-current",
+            "tx-10-second-avg",
+            "tx-total-avg",
+            "rx-current",
+            "rx-10-second-average",
+            "rx-total-avg",
+            "random-data",
+            "direction",
+            "conn-count",
+            ".section",
+            "local-cpu-load",
+            "remote-cpu-load",
+        ]
+
+        with open("Results.txt", "a") as file:
+            # Test Parameters Table
+            file.write("+{:-^24}+{:-^26}+\n".format("", ""))
+            file.write("| {:<23}| {:<25}|\n".format("Parameter", "Value"))
+            file.write("+{:-^24}+{:-^26}+\n".format("", ""))
+            file.write("| {:<23}| {:<25}|\n".format("Frequency", freq))
             file.write(
-                "========================= Test Parameters =========================\n\n"
+                "| {:<23}| {:<25}|\n".format("Average Ping Time", average_ping_time)
+            )
+            file.write("| {:<23}| {:<25}|\n".format("Signal", signal))
+            file.write("| {:<23}| {:<25}|\n".format("AP IP", ap_ip))
+            file.write("| {:<23}| {:<25}|\n".format("Station IP", station_ip))
+            file.write("+{:-^25}+{:-^25}+\n\n".format("", ""))
+
+            # Data Table Headers
+            file.write(
+                "| {:<13}| {:<9}| {:<11}| {:<17}| {:<13}| {:<11}| {:<17}| {:<13}| {:<12}| {:<9}| {:<10}| {:<8}| {:<15}| {:<15}|".format(
+                    *headers
+                )
+            )
+            file.write("\n")
+            file.write(
+                "+{:-^14}+{:-^10}+{:-^12}+{:-^18}+{:-^14}+{:-^12}+{:-^18}+{:-^14}+{:-^13}+{:-^10}+{:-^11}+{:-^9}+{:-^16}+{:-^16}+\n".format(
+                    *[""] * len(headers)
+                )
             )
 
-            # Write the test time
-            file.write(f"Test Time: {test_time}\n\n")
+            # Print data rows
+            for entry in result:
+                # Convert values from bps to Mbps
+                for field in bps_fields:
+                    if field in entry and entry[field] != "-":
+                        entry[field] = (
+                            float(entry[field]) / 1_000_000
+                        )  # Convert to Mbps
 
-            # Write the average ping time
-            file.write(f"Average Ping Time: {average_ping_time}\n\n")
-
-            # Write the signal strength
-            file.write(f"Signal Strength: {signal}\n\n")
-
-            # Write the AP IP Address
-            file.write(f"AP IP Address: {ap_ip}\n\n")
-
-            # Write the Station IP Address
-            file.write(f"Station IP Address: {station_ip}\n\n")
-
-            # Write the frequency
-            file.write(f"Frequency: {freq}\n\n")
+                values = [entry.get(header, "-") for header in headers]
+                data_line = "| {:<13}| {:<9}| {:<11}| {:<17}| {:<13}| {:<11}| {:<17}| {:<13}| {:<12}| {:<9}| {:<10}| {:<8}| {:<15}| {:<15}|\n".format(
+                    *values
+                )
+                file.write(data_line)
 
             file.write(
-                "========================== Test Results ==========================\n\n"
-            )
-
-            # Write the test result
-            for key, value in result.items():
-                try:
-                    file.write(
-                        f"{key}: {str(value)}\n\n"
-                    )  # Convert value to string & add newline for spacing
-                except Exception as e:
-                    print(f"Error writing key: {key}, value: {value} to the file.")
-
-            file.write(
-                "========================== End of Test ===========================\n\n"
+                "+{:-^14}+{:-^10}+{:-^12}+{:-^18}+{:-^14}+{:-^12}+{:-^18}+{:-^14}+{:-^13}+{:-^10}+{:-^11}+{:-^9}+{:-^16}+{:-^16}+".format(
+                    *[""] * len(headers)
+                )
             )
 
         # Wait for the test duration plus an additional delay before moving to the next frequency
