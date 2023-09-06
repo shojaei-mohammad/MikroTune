@@ -164,7 +164,23 @@ def set_frequency(api, frequency):
 
 
 def update_ping_time(api, ap_address, station_address, count=4):
+    """
+    Pings the station from the access point (AP) to get the average round-trip time (RTT).
+
+    Args:
+    - api (object): An instance or object representing the API to interact with.
+    - ap_address (str): IP Address of the Access Point.
+    - station_address (str): IP Address of the Station to be pinged.
+    - count (int, optional): Number of ping attempts. Defaults to 4.
+
+    Returns:
+    - float: Average RTT if successful, or a large number (float("inf")) indicating timeout or an error.
+
+    Raises:
+    - Exception: Any exception that occurs while pinging.
+    """
     try:
+        # Send ping requests via the API
         ping_responses = api.get_resource("/").call(
             "ping",
             {"address": station_address, "count": "4", "src-address": ap_address},
@@ -176,7 +192,7 @@ def update_ping_time(api, ap_address, station_address, count=4):
             avg_rtt = float(ping_responses[-1]["avg-rtt"].rstrip("ms"))
             return avg_rtt
         else:
-            # If 'avg-rtt' doesn't exist, it indicates a potential issue, so return a large value
+            # If 'avg-rtt' doesn't exist, it indicates a potential issue
             print("Ping timeout or other issues detected.")
             return float("inf")
 
@@ -188,6 +204,19 @@ def update_ping_time(api, ap_address, station_address, count=4):
 def check_station_registered(
     api, wait_time, config_ping_value, ap_address, station_address
 ):
+    """
+    Checks if a station is registered within a given wait time and meets specific ping and signal strength conditions.
+
+    Args:
+    - api (object): An instance or object representing the API to interact with.
+    - wait_time (int): Time (in seconds) to wait and check for the station's registration.
+    - config_ping_value (float): Threshold value for the average ping time.
+    - ap_address (str): IP Address of the Access Point.
+    - station_address (str): IP Address of the Station to be checked.
+
+    Returns:
+    - bool: True if station meets conditions, False otherwise.
+    """
     registration_resource = api.get_resource("interface/wireless/registration-table")
     start_time = time.time()
     is_station_registered = False
