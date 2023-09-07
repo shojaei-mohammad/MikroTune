@@ -220,6 +220,7 @@ def check_station_registered(
     registration_resource = api.get_resource("interface/wireless/registration-table")
     start_time = time.time()
     is_station_registered = False
+    config = read_config_from_json("config.json")
 
     while time.time() - start_time < wait_time:
         registration_status = registration_resource.get()
@@ -239,9 +240,9 @@ def check_station_registered(
 
             signal_strength = int(registration_status[0].get("signal-strength", "-999"))
             SHARED_DATA["signal"] = signal_strength
-
+            valid_signal = config["valid_tx_signal"]
             # Check both conditions: signal strength and ping average
-            if signal_strength > -70 and avg_ping_time < config_ping_value:
+            if signal_strength > valid_signal and avg_ping_time < config_ping_value:
                 return True
             else:
                 # Exit the loop if station is ready but doesn't meet ping/signal conditions
@@ -293,7 +294,7 @@ def run_bandwidth_test(api, params):
 
     try:
         test_results = api.get_resource("/tool").call("bandwidth-test", test_args)
-
+        print("this is test result:\n ", test_results)
         return test_results
     except Exception as e:
         print(f"Error while executing bandwidth test: {e}")

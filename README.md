@@ -1,56 +1,59 @@
-"""
-MikroTune: Automated Frequency and Bandwidth Tester for MikroTik Devices
 
-Description:
-    MikroTune is a Python-based tool designed to assist network administrators
-    and engineers in testing different frequencies on MikroTik devices. The
-    program iterates through specified frequency ranges, checks the connectivity
-    and signal quality, and then performs a bandwidth test under optimal conditions.
+# MikroTune: Automated Frequency and Bandwidth Tester for MikroTik Devices
 
-Features:
-    1. User-friendly CLI for entering device and test parameters.
-    2. Support for custom frequency ranges with default values.
-    3. Configurable bandwidth test parameters like protocol, direction, limit, and duration.
-    4. Utilizes external JSON configuration for values such as signal and ping thresholds.
-    5. Automated frequency changes with checks for station registration.
-    6. Signal strength and ping response time validations before bandwidth tests.
-    7. Comprehensive logging of test results for analysis.
+## Description
+MikroTune is a Python-based tool created to help network administrators and engineers in testing various frequencies on MikroTik devices. The software cycles through given frequency ranges, inspects the connection and signal quality, and then carries out a bandwidth test under the best conditions.
 
-Usage:
-    Simply run the script and follow the CLI prompts to input necessary parameters.
-    Results will be logged in a specified output file.
+## Features
+- **User-friendly CLI**: Effortlessly input device and test parameters.
+- **Custom Frequency Ranges**: Includes default values.
+- **Configurable Bandwidth Parameters**: Define protocol, direction, limit, and duration.
+- **External JSON Configuration**: Set values for signal strength and ping thresholds.
+- **Automated Frequency Adjustments**: Ensure station registration is active.
+- **Data Validations**: Signal strength and ping response time checks prior to bandwidth tests.
+- **Logging**: Detailed test results for further analysis.
 
-Disclaimer:
-    Always use MikroTune in a controlled environment before deploying in a production setting.
-    Improper use or incorrect configurations may disrupt network services. Ensure compliance
-    with local regulations when adjusting frequencies.
+## Usage
+Execute the script and adhere to the CLI prompts to provide the necessary parameters. The results will be saved to a predefined output file.
 
-"""
-MikroTune: Automated Frequency and Bandwidth Tester for MikroTik Devices
+## Disclaimer
+Use MikroTune in a controlled setting before implementing it in a live environment. Wrong usage or misconfigurations can interrupt network services. Abide by local laws when adjusting frequencies.
 
-Description:
-    MikroTune is a Python-based tool designed to assist network administrators
-    and engineers in testing different frequencies on MikroTik devices. The
-    program iterates through specified frequency ranges, checks the connectivity
-    and signal quality, and then performs a bandwidth test under optimal conditions.
 
-Features:
-    1. User-friendly CLI for entering device and test parameters.
-    2. Support for custom frequency ranges with default values.
-    3. Configurable bandwidth test parameters like protocol, direction, limit, and duration.
-    4. Utilizes external JSON configuration for values such as signal and ping thresholds.
-    5. Automated frequency changes with checks for station registration.
-    6. Signal strength and ping response time validations before bandwidth tests.
-    7. Comprehensive logging of test results for analysis.
+## Date of Creation
+September 2, 2023
 
-Usage:
-    Simply run the script and follow the CLI prompts to input necessary parameters.
-    Results will be logged in a specified output file.
+## Getting Started
 
-Disclaimer:
-    Always use MikroTune in a controlled environment before deploying in a production setting.
-    Improper use or incorrect configurations may disrupt network services. Ensure compliance
-    with local regulations when adjusting frequencies.
+1. **Prerequisites**: Install the necessary Python libraries:
+
+2. **Setup**:
+- Place `config.json` in the same directory as the script. This file should contain parameters such as wait times and valid ping times.
+- Ensure the MikroTik device has API access enabled.
+
+3. **Execution**:
+- Navigate to the directory where the script resides.
+- Run the script:
+- Follow the command-line prompts to input required parameters.
+
+4. **Output**:
+- Results are stored in the 'Results.txt' file within the same directory.
+
+## License
+This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.
+
+## License
+
+[![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](https://choosealicense.com/licenses/mit/)
+
+
+
+## Authors
+
+- [@shojaei-mohammd](https://www.github.com/shojaei-mohammad)
+
+
+
 
 
 
